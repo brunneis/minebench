@@ -8,14 +8,11 @@ import codecs
 import struct
 import os
 import csv
-from sys import argv
+import sys
 import logging
 from concurrent.futures import ThreadPoolExecutor
-import pyprind
-# from tqdm import tqdm
+from multiprocessing import cpu_count
 
-
-THREADS_NO = 1
 
 class Utils:
 
@@ -77,6 +74,7 @@ class BlockHeader:
         self.bits = int(bits) # Current target in compact format (4 bytes)
         self.sequential_nonce = sequential_nonce
         self.nonce = 0 # 32-bit number (starts at 0, 4 bytes)
+        self.used_nonces = set()
         if not nonce:
             self._new_nonce()
             return
@@ -128,44 +126,61 @@ class BlockHeader:
         if self.sequential_nonce:
             self.nonce += 1
             return
-        self.nonce = random.randint(0, 0x7FFFFFFF)
+
+        while(True):
+            nonce = random.randint(0, 0x7FFFFFFF)
+            if not nonce in self.used_nonces:
+                self.used_nonces.add(nonce)
+                self.nonce = nonce
+                break
 
 
-def thread_work(row):
+def mine_block(row, bits=0x1D00FFFF, sequential_nonce=False):
+    # Merkle root hash generation from raw transactions
     txs_hex = ''.join(row['tx'].split(':'))
     mrkl_root = Utils.hex_to_sha256_sha256(txs_hex)
-    BlockHeader(ver=int(row['ver']),
+    return BlockHeader(ver=int(row['ver']),
                      prev_block=row['prev_block'],
                      mrkl_root=mrkl_root,
                      time=int(row['time']),
-                     bits=522000000, # 2 zeros (difficulty)
-                     sequential_nonce=True).mine()
+                     bits=bits,
+                     sequential_nonce=sequential_nonce).mine()
+
+def get_points(blocks_no, millis):
+    return int(len(futures)*10e6/total_millis)
+
 
 if __name__ == "__main__":
-    random.seed("minebench")
+    from tqdm import tqdm
     logging.getLogger().setLevel(logging.WARN)
 
-    if len(argv) != 2:
+    THREADS_NO = cpu_count()
+    logging.info(f'THREADS_NO={THREADS_NO}')
+
+    random.seed(1984)
+
+    if len(sys.argv) != 2:
         logging.error("You must indicate an input csv file.")
         raise SystemExit
-    filename = argv[1]
+    filename = sys.argv[1]
+
+    print('\nMinebench v0.1.1 (Python 3.6)\n')
 
     with open(filename) as csvfile:
         with ThreadPoolExecutor(max_workers=THREADS_NO) as executor:
+            csv.field_size_limit(sys.maxsize)
             reader = csv.DictReader(csvfile)
 
-            start_time = Utils.current_timestamp_in_millis()
-
             futures = []
+            start_time = Utils.current_timestamp_in_millis()
             for row in reader:
-                futures.append(executor.submit(thread_work, row))
-
-            bar = pyprind.ProgBar(len(futures), bar_char='█', title='Minebench v0.1.0')
-            # for future in tqdm(futures):
-            for future in futures:
+                futures.append(executor.submit(mine_block,
+                                               row,
+                                               bits=0x1F888888)) # Higher target than maximum
+                     
+            for future in tqdm(futures, unit=' blocks'):
                 future.result()
-                bar.update()
-            print(bar)
 
-            total_seconds = Utils.current_timestamp_in_millis() - start_time
-            logging.info('Total elapsed seconds: %.2f\n' % (total_seconds / 1000))
+            total_millis = Utils.current_timestamp_in_millis() - start_time
+            print('\n - Elapsed time: %.2f seconds' % (total_millis / 1000))
+            print(' - Points: %d' % get_points(len(futures), total_millis))
