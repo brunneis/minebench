@@ -5,5 +5,5 @@ tunable parameters such as difficulty or nonce generation mode.
 
 ### Basic usage
 ```bash
-python minebench.py 50k_blocks.py
+python minebench.py 50k_blocks.csv
 ```
