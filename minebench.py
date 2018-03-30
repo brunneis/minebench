@@ -16,15 +16,34 @@ from multiprocessing import Process
 class Minebench:
     @staticmethod
     def mine_block(row, bits=0x1D00FFFF, sequential_nonce=False):
-        # Merkle root hash generation from raw transactions
-        txs_hex = ''.join(row['tx'].split(':'))
-        mrkl_root = FormatUtils.hex_to_sha256_sha256(txs_hex)
+        # Merkle root from the block's raw transactions
+        txs = row['tx'].split(':')
+        merkle_root = Minebench.get_merkle_root(txs)
         return BlockHeader(ver=int(row['ver']),
                            prev_block=row['prev_block'],
-                           mrkl_root=mrkl_root,
+                           merkle_root=merkle_root,
                            time=int(row['time']),
                            bits=bits,
                            sequential_nonce=sequential_nonce).mine()
+
+    @staticmethod
+    def get_merkle_root(txs):
+        txs_hashes = []
+        for tx in txs:
+            txs_hashes.append(FormatUtils.hex_to_sha256_sha256(tx))
+
+        merkle_hashes = txs_hashes
+        while len(merkle_hashes) > 1:
+            merkle_hashes_len = len(merkle_hashes)
+            new_merkle_hashes = []
+            for i in range(0, merkle_hashes_len, 2):
+                if merkle_hashes_len > i+1:
+                    new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(merkle_hashes[i] + merkle_hashes[i+1]))
+                    continue
+                new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(merkle_hashes[i] + merkle_hashes[i]))
+            merkle_hashes = new_merkle_hashes
+
+        return merkle_hashes[0]
 
     @staticmethod
     def get_points(blocks_no, millis):
@@ -128,6 +147,33 @@ class FormatUtils:
         return int(round(time.time() * 1000))
 
     @staticmethod
+    def b(string):
+        header_bin = FormatUtils.hex_to_bin(string)
+        first_hash_bin = sha256(header_bin).digest()
+        second_hash_bin = sha256(first_hash_bin).digest()  # big-endian
+
+        big_endian_hash = codecs.encode(second_hash_bin, 'hex').decode('utf-8')
+        return big_endian_hash
+
+    @staticmethod
+    def c(string):
+        header_bin = FormatUtils.hex_to_bin(string)
+        first_hash_bin = sha256(header_bin).digest()
+
+        big_endian_hash = codecs.encode(first_hash_bin, 'hex').decode('utf-8')
+        block_header_hash = FormatUtils.sha256_to_hex_little_endian(
+            big_endian_hash)
+        return block_header_hash
+
+    @staticmethod
+    def d(string):
+        header_bin = FormatUtils.hex_to_bin(string)
+        first_hash_bin = sha256(header_bin).digest()
+
+        big_endian_hash = codecs.encode(first_hash_bin, 'hex').decode('utf-8')
+        return big_endian_hash
+
+    @staticmethod
     def hex_to_sha256_sha256(string):
         header_bin = FormatUtils.hex_to_bin(string)
         first_hash_bin = sha256(header_bin).digest()
@@ -143,7 +189,7 @@ class BlockHeader:
     def __init__(self,
                  ver,
                  prev_block,
-                 mrkl_root,
+                 merkle_root,
                  time,
                  bits,
                  nonce=None,
@@ -152,7 +198,7 @@ class BlockHeader:
         # Hash of the previous block header (32 bytes)
         self.prev_block = prev_block
         # Hash based on all of the transactions in the block (32 bytes)
-        self.mrkl_root = mrkl_root
+        self.merkle_root = merkle_root
         self.time = int(time)  # Timestamp in seconds (4 bytes)
         self.bits = int(bits)  # Current target in compact format (4 bytes)
         self.sequential_nonce = sequential_nonce
@@ -195,7 +241,7 @@ class BlockHeader:
     def _get_hex(self):
         return FormatUtils.uint32_to_hex_little_endian(self.ver) \
             + FormatUtils.sha256_to_hex_little_endian(self.prev_block) \
-            + FormatUtils.sha256_to_hex_little_endian(self.mrkl_root) \
+            + FormatUtils.sha256_to_hex_little_endian(self.merkle_root) \
             + FormatUtils.uint32_to_hex_little_endian(self.time) \
             + FormatUtils.uint32_to_hex_little_endian(self.bits) \
             + FormatUtils.uint32_to_hex_little_endian(self.nonce)
@@ -219,7 +265,7 @@ class BlockHeader:
 
 
 if __name__ == "__main__":
-    print('\nMinebench v0.1.2 (Python 3.6+)\n')
+    print('\nMinebench v0.1.3 (Python 3.6+)\n')
     random.seed(1984)
     logging.getLogger().setLevel(logging.INFO)
     processes_no = cpu_count()
