@@ -9,8 +9,7 @@ import struct
 import os
 import sys
 import logging
-from multiprocessing import cpu_count
-from multiprocessing import Process
+from multiprocessing import Process, cpu_count
 
 
 class Minebench:
@@ -145,33 +144,6 @@ class FormatUtils:
     @staticmethod
     def current_timestamp_in_millis():
         return int(round(time.time() * 1000))
-
-    @staticmethod
-    def b(string):
-        header_bin = FormatUtils.hex_to_bin(string)
-        first_hash_bin = sha256(header_bin).digest()
-        second_hash_bin = sha256(first_hash_bin).digest()  # big-endian
-
-        big_endian_hash = codecs.encode(second_hash_bin, 'hex').decode('utf-8')
-        return big_endian_hash
-
-    @staticmethod
-    def c(string):
-        header_bin = FormatUtils.hex_to_bin(string)
-        first_hash_bin = sha256(header_bin).digest()
-
-        big_endian_hash = codecs.encode(first_hash_bin, 'hex').decode('utf-8')
-        block_header_hash = FormatUtils.sha256_to_hex_little_endian(
-            big_endian_hash)
-        return block_header_hash
-
-    @staticmethod
-    def d(string):
-        header_bin = FormatUtils.hex_to_bin(string)
-        first_hash_bin = sha256(header_bin).digest()
-
-        big_endian_hash = codecs.encode(first_hash_bin, 'hex').decode('utf-8')
-        return big_endian_hash
 
     @staticmethod
     def hex_to_sha256_sha256(string):
