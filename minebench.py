@@ -62,8 +62,9 @@ class Minebench:
                     start_row=0,
                     rows_no=0,
                     bits=0x1D00FFFF,
-                    sequential_nonce=False,
+                    sequential_nonce=True,
                     process_id=None):
+        random.seed(1984)
         logging.info(f'process {process_id} started')
         with open(filename, 'r') as file:
             InputUtils.forward_file_lines(file, start_row)
@@ -131,7 +132,7 @@ class FormatUtils:
 
     @staticmethod
     def hex_to_bin(string):
-        return bytes(bytearray.fromhex(string))
+        return bytearray.fromhex(string)
 
     @staticmethod
     def hex_to_int(string):
@@ -146,15 +147,19 @@ class FormatUtils:
         return int(round(time.time() * 1000))
 
     @staticmethod
-    def hex_to_sha256_sha256(string):
-        header_bin = FormatUtils.hex_to_bin(string)
-        first_hash_bin = sha256(header_bin).digest()
+    def bin_to_sha256_sha256(header_bin):
+        first_hash_bin = sha256(bytes(header_bin)).digest()
         second_hash_bin = sha256(first_hash_bin).digest()  # big-endian
 
         big_endian_hash = codecs.encode(second_hash_bin, 'hex').decode('utf-8')
         block_header_hash = FormatUtils.sha256_to_hex_little_endian(
             big_endian_hash)
         return block_header_hash
+
+    @staticmethod
+    def hex_to_sha256_sha256(string):
+        header_bin = FormatUtils.hex_to_bin(string)
+        return FormatUtils.bin_to_sha256_sha256(header_bin)
 
 
 class BlockHeader:
@@ -165,7 +170,7 @@ class BlockHeader:
                  time,
                  bits,
                  nonce=None,
-                 sequential_nonce=False):
+                 sequential_nonce=True):
         self.ver = int(ver)  # Block version number (4 bytes)
         # Hash of the previous block header (32 bytes)
         self.prev_block = prev_block
@@ -176,10 +181,7 @@ class BlockHeader:
         self.sequential_nonce = sequential_nonce
         self.nonce = 0  # 32-bit number (starts at 0, 4 bytes)
         self.used_nonces = set()
-        if not nonce:
-            self._set_new_nonce()
-            return
-        self.nonce = int(nonce)
+        self.header_bin = self._get_bin()
 
     def mine(self):
         network_target = self._get_target()
@@ -189,10 +191,10 @@ class BlockHeader:
         block_seconds = 0
         attempts = 1
 
-        current_hash = self._get_hash()
+        current_hash = self._get_hash(self.header_bin)
         while (current_hash > network_target):
             self._set_new_nonce()
-            current_hash = self._get_hash()
+            current_hash = self._get_hash(self.header_bin)
             block_seconds = FormatUtils.current_timestamp_in_millis() - start_time
             attempts += 1
 
@@ -210,6 +212,9 @@ class BlockHeader:
         target = coeff * 2 ** (8 * (exp - 3))
         return FormatUtils.uint256_to_hex_big_endian(target)
 
+    def _get_bin(self):
+        return FormatUtils.hex_to_bin(self._get_hex())
+
     def _get_hex(self):
         return FormatUtils.uint32_to_hex_little_endian(self.ver) \
             + FormatUtils.sha256_to_hex_little_endian(self.prev_block) \
@@ -218,14 +223,13 @@ class BlockHeader:
             + FormatUtils.uint32_to_hex_little_endian(self.bits) \
             + FormatUtils.uint32_to_hex_little_endian(self.nonce)
 
-    def _get_hash(self):
-        header_hex = self._get_hex()
-        block_header_hash = FormatUtils.hex_to_sha256_sha256(header_hex)
-        return block_header_hash
+    def _get_hash(self, header_bin):
+        return FormatUtils.bin_to_sha256_sha256(header_bin)
 
     def _set_new_nonce(self):
         if self.sequential_nonce:
             self.nonce += 1
+            self.header_bin[-4:] = struct.pack("<I", self.nonce)
             return
 
         while(True):
@@ -233,12 +237,12 @@ class BlockHeader:
             if not nonce in self.used_nonces:
                 self.used_nonces.add(nonce)
                 self.nonce = nonce
+                self.header_bin[-4:] = struct.pack("<I", self.nonce)
                 break
 
 
 if __name__ == "__main__":
-    print('\nMinebench v0.1.3 (Python 3.6+)\n')
-    random.seed(1984)
+    print('\nMinebench v0.1.4 (Python 3.6+)\n')
     logging.getLogger().setLevel(logging.INFO)
     processes_no = cpu_count()
     process_ids = range(0, processes_no)
