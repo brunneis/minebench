@@ -14,16 +14,20 @@ from multiprocessing import Process, cpu_count
 
 class Minebench:
     @staticmethod
-    def mine_block(row, bits=0x1D00FFFF, sequential_nonce=False):
+    def get_block_header(row, bits=0x1D00FFFF, sequential_nonce=False):
+        # Line to dict
+        row = Minebench.get_dict_from_file_line(row)
+
         # Merkle root from the block's raw transactions
         txs = row['tx'].split(':')
         merkle_root = Minebench.get_merkle_root(txs)
+
         return BlockHeader(ver=int(row['ver']),
                            prev_block=row['prev_block'],
                            merkle_root=merkle_root,
                            time=int(row['time']),
                            bits=bits,
-                           sequential_nonce=sequential_nonce).mine()
+                           sequential_nonce=sequential_nonce)
 
     @staticmethod
     def get_merkle_root(txs):
@@ -62,7 +66,7 @@ class Minebench:
                     start_row=0,
                     rows_no=0,
                     bits=0x1D00FFFF,
-                    sequential_nonce=True,
+                    sequential_nonce=False,
                     process_id=None):
         random.seed(1984)
         logging.info(f'process {process_id} started')
@@ -78,9 +82,9 @@ class Minebench:
                     logging.info(
                         f'process {process_id}: {i + 1} mined blocks')
 
-                Minebench.mine_block(Minebench.get_dict_from_file_line(row),
-                                     bits,
-                                     sequential_nonce)
+                Minebench.get_block_header(row,
+                                           bits,
+                                           sequential_nonce).mine()
 
 
 class InputUtils:
@@ -134,6 +138,9 @@ class FormatUtils:
     def hex_to_bin(string):
         return bytearray.fromhex(string)
 
+    def bin_to_hex(array):
+        return codecs.encode(array, 'hex')
+
     @staticmethod
     def hex_to_int(string):
         return int(string, 16)
@@ -147,19 +154,23 @@ class FormatUtils:
         return int(round(time.time() * 1000))
 
     @staticmethod
-    def bin_to_sha256_sha256(header_bin):
+    def bin_to_sha256_sha256_bin(header_bin):
         first_hash_bin = sha256(bytes(header_bin)).digest()
-        second_hash_bin = sha256(first_hash_bin).digest()  # big-endian
+        second_hash_bin = sha256(first_hash_bin).digest()[::-1]  # little-endian
+        return second_hash_bin
 
-        big_endian_hash = codecs.encode(second_hash_bin, 'hex').decode('utf-8')
-        block_header_hash = FormatUtils.sha256_to_hex_little_endian(
-            big_endian_hash)
-        return block_header_hash
+    @staticmethod
+    def bin_to_sha256_sha256(header_bin):
+        second_hash = codecs.encode(
+            FormatUtils.bin_to_sha256_sha256_bin(header_bin),
+                                                 'hex').decode('utf-8')
+        return second_hash
 
     @staticmethod
     def hex_to_sha256_sha256(string):
         header_bin = FormatUtils.hex_to_bin(string)
-        return FormatUtils.bin_to_sha256_sha256(header_bin)
+        second_hash = FormatUtils.bin_to_sha256_sha256(header_bin)
+        return second_hash
 
 
 class BlockHeader:
@@ -186,6 +197,7 @@ class BlockHeader:
     def mine(self):
         network_target = self._get_target()
         logging.debug(f'Target: {network_target}')
+        network_target = FormatUtils.hex_to_bin(network_target)
 
         start_time = FormatUtils.current_timestamp_in_millis()
         block_seconds = 0
@@ -198,7 +210,7 @@ class BlockHeader:
             block_seconds = FormatUtils.current_timestamp_in_millis() - start_time
             attempts += 1
 
-        logging.debug(f'Block found: {current_hash}')
+        logging.debug(f'Block found: {FormatUtils.bin_to_hex(current_hash)}')
         logging.debug(f'Nonce: {self.nonce}')
         logging.debug(f'Attempts: {attempts}')
         logging.debug('Block elapsed seconds: %.2f\n' % (block_seconds / 1000))
@@ -224,7 +236,7 @@ class BlockHeader:
             + FormatUtils.uint32_to_hex_little_endian(self.nonce)
 
     def _get_hash(self, header_bin):
-        return FormatUtils.bin_to_sha256_sha256(header_bin)
+        return FormatUtils.bin_to_sha256_sha256_bin(header_bin)
 
     def _set_new_nonce(self):
         if self.sequential_nonce:
@@ -242,7 +254,7 @@ class BlockHeader:
 
 
 if __name__ == "__main__":
-    print('\nMinebench v0.1.4 (Python 3.6+)\n')
+    print('\nMinebench v0.1.5 (Python 3.6+)\n')
     logging.getLogger().setLevel(logging.INFO)
     processes_no = cpu_count()
     process_ids = range(0, processes_no)
@@ -267,7 +279,8 @@ if __name__ == "__main__":
                                   'start_row': split_size * i,
                                   'rows_no': split_size,
                                   'bits': bits,
-                                  'process_id': i})
+                                  'process_id': i,
+                                  'sequential_nonce': True})
         process.start()
         processes.append(process)
 
