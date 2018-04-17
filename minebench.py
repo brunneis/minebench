@@ -210,7 +210,8 @@ class BlockHeader:
             block_seconds = FormatUtils.current_timestamp_in_millis() - start_time
             attempts += 1
 
-        logging.debug(f'Block found: {FormatUtils.bin_to_hex(current_hash)}')
+        current_hash = FormatUtils.bin_to_hex(current_hash)
+        logging.debug(f'Block found: {current_hash}')
         logging.debug(f'Nonce: {self.nonce}')
         logging.debug(f'Attempts: {attempts}')
         logging.debug('Block elapsed seconds: %.2f\n' % (block_seconds / 1000))
