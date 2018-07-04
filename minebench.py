@@ -43,7 +43,7 @@ class Minebench:
                 if merkle_hashes_len > i+1:
                     new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(merkle_hashes[i] + merkle_hashes[i+1]))
                     continue
-                new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(merkle_hashes[i] + merkle_hashes[i]))
+                new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(merkle_hashes[i]))
             merkle_hashes = new_merkle_hashes
 
         return merkle_hashes[0]
