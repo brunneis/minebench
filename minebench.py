@@ -44,15 +44,15 @@ class Minebench:
                     h1 = FormatUtils.sha256_to_hex_little_endian(merkle_hashes[i])
                     h2 = FormatUtils.sha256_to_hex_little_endian(merkle_hashes[i+1])
                     new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(h1 + h2))
-                    logging.debug('Hash Tx1  : %s' % (merkle_hashes[i]))
-                    logging.debug('Hash Tx2  : %s' % (merkle_hashes[i+1]))
-                    logging.debug('Hash TxS  : %s' % (new_merkle_hashes[-1]))
+                    # logging.debug('Hash Tx1  : %s' % (merkle_hashes[i]))
+                    # logging.debug('Hash Tx2  : %s' % (merkle_hashes[i+1]))
+                    # logging.debug('Hash TxS  : %s' % (new_merkle_hashes[-1]))
                     continue
                 elif merkle_hashes_len == i+1:
                     h1 = FormatUtils.sha256_to_hex_little_endian(merkle_hashes[i])
                     new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(h1 + h1))
-                    logging.debug('Hash Tx1  : %s' % (merkle_hashes[i]))
-                    logging.debug('Hash TxS  : %s' % (new_merkle_hashes[-1]))
+                    # logging.debug('Hash Tx1  : %s' % (merkle_hashes[i]))
+                    # logging.debug('Hash TxS  : %s' % (new_merkle_hashes[-1]))
                     continue
                 new_merkle_hashes.append(FormatUtils.hex_to_sha256_sha256(merkle_hashes[i]))
             merkle_hashes = new_merkle_hashes
